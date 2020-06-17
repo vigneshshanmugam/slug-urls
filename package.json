@@ -1,0 +1,15 @@
+{
+  "name": "slug-urls",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "author": "Vignesh Shanmugam",
+  "license": "MIT",
+  "scripts": {
+    "clean": "rm -rf apify_storage",
+    "start": "npm run clean && node index.js"
+  },
+  "dependencies": {
+    "apify": "^0.21.0"
+  }
+}
