@@ -2,27 +2,31 @@ const Apify = require("apify");
 const { parse } = require("url");
 
 const set = new Set();
+let [, , url] = process.argv;
+
+if (!url && typeof url !== "string") {
+  console.error("Specify an URL to crawl", "node index.js <url>");
+  process.exit();
+}
+url = url.replace(/\/+$/, "");
 
 Apify.main(async () => {
   const requestQueue = await Apify.openRequestQueue();
-  await requestQueue.addRequest({
-    url: "https://flipkart.com/"
-  });
-  const pseudoUrls = [new Apify.PseudoUrl("https://flipkart.com/[.*]")];
+  await requestQueue.addRequest({ url });
+  const pseudoUrls = [new Apify.PseudoUrl(`${url}/[.*]`)];
 
-  // Create a CheerioCrawler
   const crawler = new Apify.CheerioCrawler({
     requestQueue,
-    maxRequestsPerCrawl: 100,
+    maxRequestsPerCrawl: Infinity,
     maxConcurrency: 100,
     handlePageFunction: async ({ request, $ }) => {
-      console.log("Visiting URL", request.url);
+      console.log("Visiting", request.url);
       set.add(request.url);
       await Apify.utils.enqueueLinks({
         $,
         selector: "a",
         pseudoUrls,
-        baseUrl: "https://flipkart.com/",
+        baseUrl: url,
         requestQueue
       });
     }
@@ -31,10 +35,17 @@ Apify.main(async () => {
   await crawler.run();
 });
 
+let analyzed = false;
 process.on("SIGINT", () => {
-  // console.log("Finished", set.values());
   analyzeUrls(set.values(), set.size);
+  analyzed = true;
   process.exit(0);
+});
+
+process.on("exit", () => {
+  if (!analyzed) {
+    analyzeUrls(set.values(), set.size);
+  }
 });
 
 function getSlugPath(url, depth = 2) {
@@ -43,7 +54,7 @@ function getSlugPath(url, depth = 2) {
 
   const redactString = ":id";
   const end = "*";
-  const separatorsRegex = /[-_]/g;
+  const specialCharsRegex = /\W|_/g;
   const digitsRegex = /[0-9]/g;
   const lowerCaseRegex = /[a-z]/g;
   const upperCaseRegex = /[A-Z]/g;
@@ -61,8 +72,8 @@ function getSlugPath(url, depth = 2) {
       break;
     }
 
-    var numberOfSeparators = (part.match(separatorsRegex) || []).length;
-    if (numberOfSeparators > 3) {
+    var numberOfSpecialChars = (part.match(specialCharsRegex) || []).length;
+    if (numberOfSpecialChars >= 3) {
       redactedParts.push(redactString);
       redcatedBefore = true;
       continue;
@@ -70,8 +81,8 @@ function getSlugPath(url, depth = 2) {
 
     var numberOfDigits = (part.match(digitsRegex) || []).length;
     if (
-      (part.length > 3 && numberOfDigits / part.length >= 0.3) ||
-      numberOfDigits > 3
+      numberOfDigits > 3 ||
+      (part.length > 3 && numberOfDigits / part.length >= 0.3)
     ) {
       redactedParts.push(redactString);
       redcatedBefore = true;
